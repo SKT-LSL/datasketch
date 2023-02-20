@@ -197,6 +197,33 @@ class MinHashLSH(object):
         else:
             return list(candidates)
 
+    def get(self, key):
+        '''
+        Giving the Minhash of the query set
+
+        Args:
+            key (doc_id): Key used for redis insert
+        
+        Returns:
+            `list` of unique keys.
+        '''
+        candidates = set()
+        # convert key(str) to byte
+        if self.prepickle:
+            key = pickle.dumps(key)
+        # find items by key in Redis
+        items = self.keys.get(key)
+        # size : the band size of the permutation
+        for hashtable in self.hashtables:
+            for H in items:
+                for key in hashtable.get(H):
+                    candidates.add(key)
+        # find key(doc_id) in Redis
+        if self.prepickle:
+            return [pickle.loads(key) for key in candidates]
+        else:
+            return list(candidates)
+
     def add_to_query_buffer(self, minhash):
         '''
         Giving the MinHash of the query set, buffer
