@@ -202,7 +202,7 @@ class MinHashLSH(object):
         Giving the Minhash of the query set
 
         Args:
-            key (doc_id): Key used for redis insert
+            key (doc_id): Key used for Redis 
         
         Returns:
             `list` of unique keys.
@@ -215,8 +215,9 @@ class MinHashLSH(object):
         items = self.keys.get(key)
         # size : the band size of the permutation
         for H, hashtable in zip(items, self.hashtables):
-            for key in hashtable.get(H):
-                candidates.add(key)
+                for key in hashtable.get(H):
+                    candidates.add(key)
+        # find key(doc_id) in Redis
         if self.prepickle:
             return [pickle.loads(key) for key in candidates]
         else:
