@@ -116,10 +116,10 @@ class MinHashLSH(object):
 
         basename = storage_config.get('basename', _random_name(11))
         self.hashtables = [
-            unordered_storage(storage_config, name=b'')
+            unordered_storage(storage_config, name=b''.join([basename, b'h', struct.pack('>H', i)]))
             for i in range(self.b)]
         self.hashranges = [(i*self.r, (i+1)*self.r) for i in range(self.b)]
-        self.keys = ordered_storage(storage_config, name=b'')
+        self.keys = ordered_storage(storage_config, name=b''.join([basename, b'k']))
 
     @property
     def buffer_size(self):
@@ -214,11 +214,9 @@ class MinHashLSH(object):
         # find items by key in Redis
         items = self.keys.get(key)
         # size : the band size of the permutation
-        for hashtable in self.hashtables:
-            for H in items:
-                for key in hashtable.get(H):
-                    candidates.add(key)
-        # find key(doc_id) in Redis
+        for H, hashtable in zip(items, self.hashtables):
+            for key in hashtable.get(H):
+                candidates.add(key)
         if self.prepickle:
             return [pickle.loads(key) for key in candidates]
         else:
