@@ -10,6 +10,8 @@ from abc import ABCMeta, abstractmethod
 ABC = ABCMeta('ABC', (object,), {}) # compatible with Python 2 *and* 3
 try:
     import redis
+    from redis.cluster import RedisCluster
+    from redis.cluster import ClusterNode
 except ImportError:
     redis = None
 try:
@@ -935,12 +937,21 @@ if redis is not None:
             self.config = config
             self._buffer_size = 50000
             redis_param = self._parse_config(self.config['redis'])
-            self._redis = redis.Redis(**redis_param)
-            redis_buffer_param = self._parse_config(self.config.get('redis_buffer', {}))
-            self._buffer = RedisBuffer(self._redis.connection_pool,
-                                       self._redis.response_callbacks,
-                                       transaction=redis_buffer_param.get('transaction', True),
-                                       buffer_size=self._buffer_size)
+            # self._redis = redis.Redis(**redis_param)
+
+            nodes = []
+            for node in config['redis']['cluster']:
+                nodes.append(ClusterNode(node['host'], node['port']))
+            self._redis = RedisCluster(startup_nodes=nodes)
+
+            redis_buffer_parc = ram = self._parse_config(self.config.get('redis_buffer', {}))
+            self._buffer = None
+
+            # self._buffer = RedisBuffer(self._redis.connection_pool,
+            #                            self._redis.response_callbacks,
+            #                            transaction=redis_buffer_param.get('transaction', True),
+            #                            buffer_size=self._buffer_size)
+
             if name is None:
                 name = _random_name(11)
             self._name = name
@@ -952,7 +963,8 @@ if redis is not None:
         @buffer_size.setter
         def buffer_size(self, value):
             self._buffer_size = value
-            self._buffer.buffer_size = value
+            if self._buffer:
+                self._buffer.buffer_size = value
 
         def redis_key(self, key):
             return self._name + key
@@ -1061,7 +1073,8 @@ if redis is not None:
             return self._redis.hexists(self._name, key)
 
         def empty_buffer(self):
-            self._buffer.execute()
+            if self._buffer:
+                self._buffer.execute()
             # To avoid broken pipes, recreate the connection
             # objects upon emptying the buffer
             self.__init__(self.config, name=self._name)

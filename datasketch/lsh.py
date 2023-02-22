@@ -388,4 +388,4 @@ class MinHashLSHInsertionSession:
             minhash (datasketch.MinHash): The MinHash of the set.
         '''
         self.lsh._insert(key, minhash, check_duplication=check_duplication,
-                         buffer=True)
+                         buffer=False)
