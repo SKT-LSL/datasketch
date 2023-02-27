@@ -10,6 +10,7 @@ from abc import ABCMeta, abstractmethod
 ABC = ABCMeta('ABC', (object,), {}) # compatible with Python 2 *and* 3
 try:
     import redis
+    from redis.cluster import RedisCluster
 except ImportError:
     redis = None
 try:
@@ -125,7 +126,7 @@ class Storage(ABC):
     @abstractmethod
     def get(self, key):
         '''Get list of values associated with a key
-        
+
         Returns empty list ([]) if `key` is not found
         '''
         pass
@@ -935,9 +936,14 @@ if redis is not None:
             self.config = config
             self._buffer_size = 50000
             redis_param = self._parse_config(self.config['redis'])
-            self._redis = redis.Redis(**redis_param)
             redis_buffer_param = self._parse_config(self.config.get('redis_buffer', {}))
-            self._buffer = RedisBuffer(self._redis.connection_pool,
+
+            if redis_param.pop("cluster", False):
+                self._redis = RedisCluster(**redis_param)
+                self._buffer = None
+            else:
+                self._redis = redis.Redis(**redis_param)
+                self._buffer = RedisBuffer(self._redis.connection_pool,
                                        self._redis.response_callbacks,
                                        transaction=redis_buffer_param.get('transaction', True),
                                        buffer_size=self._buffer_size)
@@ -952,7 +958,8 @@ if redis is not None:
         @buffer_size.setter
         def buffer_size(self, value):
             self._buffer_size = value
-            self._buffer.buffer_size = value
+            if self._buffer:
+                self._buffer.buffer_size = value
 
         def redis_key(self, key):
             return self._name + key
@@ -1031,7 +1038,7 @@ if redis is not None:
             # insertion will not be processed until the
             # buffer is cleared
             buffer = kwargs.pop('buffer', False)
-            if buffer:
+            if buffer and self._buffer:
                 self._insert(self._buffer, key, *vals)
             else:
                 self._insert(self._redis, key, *vals)
@@ -1061,7 +1068,8 @@ if redis is not None:
             return self._redis.hexists(self._name, key)
 
         def empty_buffer(self):
-            self._buffer.execute()
+            if self._buffer:
+                self._buffer.execute()
             # To avoid broken pipes, recreate the connection
             # objects upon emptying the buffer
             self.__init__(self.config, name=self._name)
