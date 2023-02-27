@@ -901,6 +901,31 @@ if redis is not None:
                 self.execute()
             super(RedisBuffer, self).execute_command(*args, **kwargs)
 
+    class RedisClusterBuffer(redis.cluster.ClusterPipeline):
+        def __init__(self, cluster: RedisCluster, buffer_size: int):
+            self._buffer_size = buffer_size
+            super(RedisClusterBuffer, self).__init__(
+                nodes_manager=cluster.nodes_manager,
+                commands_parser=cluster.commands_parser,
+                result_callbacks=cluster.result_callbacks,
+                cluster_response_callbacks=cluster.cluster_response_callbacks,
+                cluster_error_retry_attempts=cluster.cluster_error_retry_attempts,
+                read_from_replicas=cluster.read_from_replicas,
+                reinitialize_steps=cluster.reinitialize_steps
+            )
+
+        @property
+        def buffer_size(self):
+            return self._buffer_size
+
+        @buffer_size.setter
+        def buffer_size(self, value):
+            self._buffer_size = value
+
+        def execute_command(self, *args, **kwargs):
+            if len(self.command_stack) >= self._buffer_size:
+                self.execute()
+            super(RedisClusterBuffer, self).execute_command(*args, **kwargs)
 
     class RedisStorage:
         '''Base class for Redis-based storage containers.
@@ -940,7 +965,7 @@ if redis is not None:
 
             if redis_param.pop("cluster", False):
                 self._redis = RedisCluster(**redis_param)
-                self._buffer = None
+                self._buffer = RedisClusterBuffer(self._redis, self._buffer_size)
             else:
                 self._redis = redis.Redis(**redis_param)
                 self._buffer = RedisBuffer(self._redis.connection_pool,
