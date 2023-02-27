@@ -114,12 +114,12 @@ class MinHashLSH(object):
         else:
             self._H = self._byteswap
 
-        basename = storage_config.get('basename', _random_name(11))
+        basename = storage_config.get('basename', b'') # shorten redis key names
         self.hashtables = [
-            unordered_storage(storage_config, name=b''.join([basename, b'_bucket_', struct.pack('>H', i)]))
+            unordered_storage(storage_config, name=b''.join([basename, b'h', struct.pack('>H', i)]))
             for i in range(self.b)]
         self.hashranges = [(i*self.r, (i+1)*self.r) for i in range(self.b)]
-        self.keys = ordered_storage(storage_config, name=b''.join([basename, b'_keys']))
+        self.keys = ordered_storage(storage_config, name=b''.join([basename, b'k']))
 
     @property
     def buffer_size(self):
