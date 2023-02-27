@@ -197,6 +197,30 @@ class MinHashLSH(object):
         else:
             return list(candidates)
 
+    def query_by_key(self, key):
+        '''
+        Giving the Key of the query set, retrieve
+        the keys that references sets with Jaccard
+        similarities greater than the threshold.
+
+        Args:
+            minhash (datasketch.MinHash): The MinHash of the query set.
+
+        Returns:
+            `list` of unique keys.
+        '''
+        if self.prepickle:
+            key = pickle.dumps(key)
+        Hs = self.keys.get(key)
+        candidates = set()
+        for H, hashtable in zip(Hs, self.hashtables):
+            for key in hashtable.get(H):
+                candidates.add(key)
+        if self.prepickle:
+            return [pickle.loads(key) for key in candidates]
+        else:
+            return list(candidates)
+
     def add_to_query_buffer(self, minhash):
         '''
         Giving the MinHash of the query set, buffer
