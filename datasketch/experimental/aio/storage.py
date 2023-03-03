@@ -14,6 +14,7 @@ from abc import ABCMeta
 ABC = ABCMeta('ABC', (object,), {})
 
 try:
+    import motor
     import motor.motor_asyncio
     from pymongo import ReturnDocument
 except ImportError:
