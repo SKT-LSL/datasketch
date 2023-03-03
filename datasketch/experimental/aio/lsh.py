@@ -295,6 +295,21 @@ class AsyncMinHashLSH(object):
         else:
             return list(candidates)
 
+    async def query_by_key(self, key):
+        """
+        see :class:`datasketch.MinHashLSH`.
+        """
+        if self.prepickle:
+            key = pickle.dumps(key)
+        Hs = await self.keys.get(key)
+
+        fs = (hashtable.get(H) for H, hashtable in zip(Hs, self.hashtables))
+        candidates = frozenset(chain.from_iterable(await asyncio.gather(*fs)))
+        if self.prepickle:
+            return [pickle.loads(key) for key in candidates]
+        else:
+            return list(candidates)
+
     async def has_key(self, key):
         """
         see :class:`datasketch.MinHashLSH`.

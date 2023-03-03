@@ -50,6 +50,9 @@ setup(
     install_requires=[
         'numpy>=1.11',
         'scipy>=1.0.0',
+        "aiounittest ; python_version>='3.6'",
+        "motor ; python_version>='3.6'",
+        'redis>=2.10.0',
     ],
     extras_require={
         'cassandra': [
