@@ -271,13 +271,14 @@ class AsyncMinHashLSH(object):
             key = pickle.dumps(key)
 
         if check_duplication and await self.has_key(key):
-            raise ValueError("The given key already exists")
-        Hs = [self._H(minhash.hashvalues[start:end])
-              for start, end in self.hashranges]
+            pass # raise ValueError("The given key already exists")
+        else:
+            Hs = [self._H(minhash.hashvalues[start:end])
+                for start, end in self.hashranges]
 
-        fs = chain((self.keys.insert(key, *Hs, buffer=buffer),),
-                   (hashtable.insert(H, key, buffer=buffer) for H, hashtable in zip(Hs, self.hashtables)))
-        await asyncio.gather(*fs)
+            fs = chain((self.keys.insert(key, *Hs, buffer=buffer),),
+                    (hashtable.insert(H, key, buffer=buffer) for H, hashtable in zip(Hs, self.hashtables)))
+            await asyncio.gather(*fs)
 
     async def query(self, minhash):
         """
