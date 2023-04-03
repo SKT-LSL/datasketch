@@ -51,7 +51,7 @@ class AsyncMinHashLSH(object):
                 'mongo': {'host': 'localhost', 'port': 27017}
             }
         self._storage_config = storage_config.copy()
-        self._storage_config['basename'] = self._storage_config.get('basename', _random_name(11))
+        self._storage_config['basename'] = self._storage_config.get('basename', b'')
         self._basename = self._storage_config['basename']
         self._batch_size = 10000
         self._threshold = threshold
