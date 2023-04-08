@@ -1,3 +1,4 @@
+import string
 import sys
 
 if sys.version_info < (3, 6):
@@ -36,7 +37,7 @@ async def async_ordered_storage(config, name=None):
     if tp == 'aiomongo':
         if motor is None:
             raise RuntimeError('motor is not installed')
-        return AsyncMongoListStorage(config, name=name)
+        return AsyncMongoListStorageGroup(config, name=name)
     elif tp == 'aioredis':
         if redis is None:
             raise RuntimeError('redis is not installed')
@@ -49,7 +50,7 @@ async def async_unordered_storage(config, name=None):
     if tp == 'aiomongo':
         if motor is None:
             raise RuntimeError('motor is not installed')
-        return AsyncMongoSetStorage(config, name=name)
+        return AsyncMongoSetStorageGroup(config, name=name)
     elif tp == 'aioredis':
         if redis is None:
             raise RuntimeError('redis is not installed')
@@ -285,6 +286,111 @@ if motor is not None and ReturnDocument is not None:
                 await self._buffer.delete_many_by_val(val=val)
             else:
                 await self._collection.find_one_and_delete({'key': key, 'vals': val})
+
+    class AsyncMongoGroup(object):
+        def __init__(self, config, name):
+            self.storages = {}
+            for c in list(string.hexdigits.lower()):
+                self.storages[c] = AsyncMongoListStorage(config, name=f"{name}_{c}")
+
+        async def empty_buffer(self):
+            fs = (s.empty_buffer() for s in self.storages.values())
+            return await asyncio.gather(*fs)
+
+        async def close(self):
+            fs = (s.close() for s in self.storages.values())
+            await asyncio.gather(*fs)
+
+        @property
+        def batch_size(self):
+            return self.storages["0"].batch_size
+
+        @batch_size.setter
+        def batch_size(self, value):
+            for s in self.storages.values():
+                s.batch_size = value
+
+        @property
+        def initialized(self):
+            return all(s.initialized for s in self.storages.values())
+
+        @property
+        def mongo_param(self):
+            return self.storages["0"].mongo_param
+
+        @staticmethod
+        def _parse_config(config):
+            return AsyncMongoListStorage._parse_config(config)
+
+        # def __getstate__(self):
+        #     return self.storages["0"].__getstate__()
+
+        # def __setstate__(self, state):
+        #     for s in self.storages:
+        #         s.__set_state__(state)
+
+    class AsyncMongoListStorageGroup(AsyncMongoGroup):  # a `keys` collection
+        def get_storage(self, key) -> AsyncMongoListStorage:  # key = doc_id
+            # print(f"AsyncMongoListStorageGroup: get_storage key: {key} -> {key[-1]}")
+            return self.storages[key[-1]]
+
+        async def keys(self):
+            fs = chain(s.keys() for s in self.storages.values())
+            return await asyncio.gather(*fs)
+
+        async def get(self, key: str):
+            return await self.get_storage(key).get(key)
+
+        async def insert(self, key, *vals, **kwargs):
+            return await self.get_storage(key).insert(key, *vals, **kwargs)
+
+        async def _insert(self, obj, key, *values):
+            return await self.get_storage(key)._insert(obj, key, *values)
+
+        async def remove(self, *keys, **kwargs):
+            fs = (self.get_storage(key).remove(keys=[key], **kwargs) for key in keys)
+            return await asyncio.gather(*fs)
+
+        async def remove_val(self, key, val, **kwargs):
+            pass
+
+        async def size(self):
+            fs = (s.size() for s in self.storages.values())
+            return sum(await asyncio.gather(*fs))
+
+        async def itemcounts(self):
+            fs = list(chain(s.itemcounts() for s in self.storages.values()))
+            return sum(await asyncio.gather(*fs))
+
+        async def has_key(self, key):
+            return True if await self._collection.find_one({"_id": key}) else False
+
+        async def status(self):
+            pass
+
+    class AsyncMongoSetStorageGroup(AsyncMongoListStorageGroup):  # `bucket` collections
+        async def get(self, key: str):
+            return await self.get_storage(key).get(key)
+
+        async def insert(self, key, *vals, **kwargs):
+            return await self.get_storage(key).insert(key, *vals, **kwargs)
+
+        def get_storage(self, key) -> AsyncMongoSetStorage:  # key = bucket
+            hex = key.hex()
+            # print(
+            #     f"AsyncMongoSetStorageGroup: get_storage key: {key} -> {hex} -> {hex[-1]}"
+            # )
+            return self.storages[hex[-1]]
+
+        async def _insert(self, obj, key, *values):
+            return await self.get_storage(key)._insert(obj, key, *values)
+
+        async def remove(self, *keys, **kwargs):
+            pass
+
+        async def remove_val(self, key, val, **kwargs):
+            return await self.get_storage(key).remove_val(key, val, **kwargs)
+
 
 if redis is not None:
     class AsyncRedisBuffer(redis.client.Pipeline):
