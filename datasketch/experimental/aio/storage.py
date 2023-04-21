@@ -83,7 +83,7 @@ if motor is not None and ReturnDocument is not None:
             elif command == 'delete_by_key':
                 if len(self._delete_by_key_documents_stack) >= self.batch_size:
                     await self.execute(command)
-                self._delete_by_key_documents_stack += (kwargs['key'],)
+                self._delete_by_key_documents_stack += (kwargs['_id'],)
             elif command == 'delete_by_val':
                 if len(self._delete_by_val_documents_stack) >= self.batch_size:
                     await self.execute(command)
@@ -97,7 +97,7 @@ if motor is not None and ReturnDocument is not None:
             elif command == 'delete_by_key' and self._delete_by_key_documents_stack:
                 buffer = self._delete_by_key_documents_stack
                 self._delete_by_key_documents_stack = tuple()
-                await self._mongo_coll.delete_many({'key': {'$in': buffer}})
+                await self._mongo_coll.delete_many({'_id': {'$in': buffer}})
             elif command == 'delete_by_val' and self._delete_by_val_documents_stack:
                 buffer = self._delete_by_val_documents_stack
                 self._delete_by_val_documents_stack = tuple()
@@ -107,7 +107,7 @@ if motor is not None and ReturnDocument is not None:
             await self.execute_command(obj=kwargs['document'], command='insert')
 
         async def delete_many_by_key(self, **kwargs):
-            await self.execute_command(key=kwargs['key'], command='delete_by_key')
+            await self.execute_command(key=kwargs['_id'], command='delete_by_key')
 
         async def delete_many_by_val(self, **kwargs):
             await self.execute_command(val=kwargs['val'], command='delete_by_val')
@@ -166,7 +166,7 @@ if motor is not None and ReturnDocument is not None:
             self._batch_size = 1000
             self._mongo_client = motor.motor_asyncio.AsyncIOMotorClient(dsn, **additional_args)
             self._collection = self._mongo_client.get_default_database(db_lsh).get_collection(self._collection_name)
-            self._collection.create_index("key", background=True)
+            # self._collection.create_index("key", background=True)
 
             self._initialized = True
             self._buffer = AsyncMongoBuffer(self._collection, self._batch_size)
@@ -218,13 +218,12 @@ if motor is not None and ReturnDocument is not None:
 
     class AsyncMongoListStorage(OrderedStorage, AsyncMongoStorage):
         async def keys(self):
-            return [doc['key'] async for doc in self._collection.find(projection={'_id': False, 'vals': False})]
+            return [doc['_id'] async for doc in self._collection.find(projection={'vals': False})]
 
         async def get(self, key: str):
-            return list(chain.from_iterable([doc['vals'] async for doc in self._collection.find(filter={'key': key},
+            return list(chain.from_iterable([doc['vals'] async for doc in self._collection.find(filter={'_id': key},
                                                                                                 projection={
-                                                                                                    '_id': False,
-                                                                                                    'key': False})]))
+                                                                                                    '_id': False})]))
 
         async def insert(self, key, *vals, **kwargs):
             buffer = kwargs.pop('buffer', False)
@@ -234,7 +233,7 @@ if motor is not None and ReturnDocument is not None:
                 await self._insert(self._collection, key, *vals)
 
         async def _insert(self, obj, key, *values):
-            await obj.insert_one(document={'key': key, 'vals': values})
+            await obj.insert_one(document={'_id': key, 'vals': values})
 
         async def remove(self, *keys, **kwargs):
             buffer = kwargs.pop('buffer', False)
@@ -242,7 +241,7 @@ if motor is not None and ReturnDocument is not None:
                 fs = (self._buffer.delete_many_by_key(key=key) for key in keys)
                 await asyncio.gather(*fs)
             else:
-                await self._collection.delete_many({'key': {'$in': keys}})
+                await self._collection.delete_many({'_id': {'$in': keys}})
 
         async def remove_val(self, key, val, **kwargs):
             pass
@@ -255,7 +254,7 @@ if motor is not None and ReturnDocument is not None:
                     self._collection.aggregate([{'$group': {'_id': '$key', 'count': {'$sum': 1}}}])}
 
         async def has_key(self, key):
-            return True if await self._collection.find_one({'key': key}) else False
+            return True if await self._collection.find_one({'_id': key}) else False
 
         async def status(self):
             status = self._parse_config(self.config['mongo'])
@@ -269,12 +268,12 @@ if motor is not None and ReturnDocument is not None:
 
     class AsyncMongoSetStorage(UnorderedStorage, AsyncMongoListStorage):
         async def get(self, key):
-            keys = [doc['vals'] async for doc in self._collection.find(filter={'key': key},
-                                                                       projection={'_id': False, 'key': False})]
+            keys = [doc['vals'] async for doc in self._collection.find(filter={'_id': key},
+                                                                       projection={'_id': False})]
             return frozenset(keys)
 
         async def _insert(self, obj, key, *values):
-            await obj.insert_one(document={'key': key, 'vals': values[0]})
+            await obj.insert_one(document={'_id': key, 'vals': values[0]})
 
         async def remove(self, *keys, **kwargs):
             pass
@@ -284,7 +283,7 @@ if motor is not None and ReturnDocument is not None:
             if buffer:
                 await self._buffer.delete_many_by_val(val=val)
             else:
-                await self._collection.find_one_and_delete({'key': key, 'vals': val})
+                await self._collection.find_one_and_delete({'_id': key, 'vals': val})
 
 if redis is not None:
     class AsyncRedisBuffer(redis.client.Pipeline):
